@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FuLab Card Builder</title>
+  <style>
+    :root {
+      --fulab-paper: #FFFFFF;
+      --fulab-silver: #D8DEE9;
+      --fulab-graphite: #2E3440;
+      --fulab-teal: #5EBCBF;
+      --fulab-indigo: #81A1C1;
+      --fulab-emerald: #A3BE8C;
+      --fulab-amber: #EBCB8B;
+      --fulab-coral: #D08770;
+      --fulab-plum: #B48EAD;
+      --fulab-slate: #708090;
+      --shadow-neo: 6px 6px 14px #cfd8e6, -6px -6px 14px #ffffff;
+      --shadow-neo-inset: inset 6px 6px 12px #cfd8e6, inset -6px -6px 12px #ffffff;
+      --focus-outline: 0 0 0 3px rgba(94, 188, 191, 0.18);
+      font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--fulab-paper);
+      color: var(--fulab-graphite);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px 48px;
+    }
+
+    main {
+      width: min(960px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    #dropZone {
+      border: 2px dashed var(--fulab-silver);
+      border-radius: 16px;
+      padding: 32px;
+      background: rgba(129, 161, 193, 0.08);
+      color: var(--fulab-graphite);
+      text-align: center;
+      transition: background 0.2s ease, border-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    #dropZone.dragover {
+      border-color: var(--fulab-teal);
+      background: rgba(94, 188, 191, 0.12);
+    }
+
+    #dropZone input {
+      display: none;
+    }
+
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #controls .left,
+    #controls .right {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 1px solid var(--fulab-silver);
+      border-radius: 16px;
+      padding: 10px 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--fulab-graphite);
+      background: var(--fulab-paper);
+      box-shadow: var(--shadow-neo);
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    button:focus-visible {
+      outline: none;
+      box-shadow: var(--shadow-neo), 0 0 0 2px var(--fulab-silver), 0 0 0 6px rgba(94, 188, 191, 0.18);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button.primary {
+      background: var(--fulab-teal);
+      color: #ffffff;
+      border-color: transparent;
+    }
+
+    button.secondary {
+      background: var(--fulab-paper);
+      color: var(--fulab-graphite);
+    }
+
+    button.danger {
+      background: var(--fulab-coral);
+      color: #ffffff;
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    #cardContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .card {
+      position: relative;
+      background: var(--fulab-paper);
+      border: 1px solid var(--fulab-silver);
+      border-radius: 18px;
+      padding: 18px 20px 16px;
+      box-shadow: var(--shadow-neo);
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card.dragging {
+      opacity: 0.6;
+      box-shadow: var(--shadow-neo-inset);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card-handle {
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      color: var(--fulab-plum);
+      cursor: grab;
+      user-select: none;
+    }
+
+    .card[draggable="true"]:active .card-handle {
+      cursor: grabbing;
+    }
+
+    .card-content {
+      min-height: 80px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-size: 1rem;
+      border-radius: 12px;
+      padding: 8px 10px;
+      outline: none;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .card-content:focus {
+      box-shadow: 0 0 0 2px var(--fulab-silver), 0 0 0 6px rgba(94, 188, 191, 0.18);
+    }
+
+    #emptyState {
+      text-align: center;
+      color: var(--fulab-slate);
+      padding: 32px;
+      border: 1px dashed var(--fulab-silver);
+      border-radius: 16px;
+      background: rgba(208, 135, 112, 0.06);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 24px 12px 32px;
+      }
+
+      .card {
+        padding: 16px;
+      }
+
+      .card-content {
+        font-size: 0.95rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <label id="dropZone">
+      <strong>Drop your .txt file here</strong>
+      <div>or click to browse</div>
+      <input id="fileInput" type="file" accept=".txt,text/plain">
+    </label>
+
+    <div id="emptyState" class="hidden">No cards yet. Drop a text file or create a new card.</div>
+    <section id="cardContainer" aria-live="polite"></section>
+    <div id="controls">
+      <div class="left">
+        <button id="addCard" class="secondary" type="button">Add Card</button>
+      </div>
+      <div class="right">
+        <button id="exportCards" class="primary" type="button">Export to TXT</button>
+      </div>
+    </div>
+  </main>
+
+  <template id="cardTemplate">
+    <article class="card" draggable="true">
+      <div class="card-header">
+        <span class="card-handle" title="Drag to reorder">⋮⋮</span>
+        <button class="delete-card danger" type="button">Delete</button>
+      </div>
+      <div class="card-content" contenteditable="true" spellcheck="true"></div>
+    </article>
+  </template>
+
+  <script>
+    (function () {
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('fileInput');
+      const addCardBtn = document.getElementById('addCard');
+      const exportBtn = document.getElementById('exportCards');
+      const cardContainer = document.getElementById('cardContainer');
+      const emptyState = document.getElementById('emptyState');
+      const cardTemplate = document.getElementById('cardTemplate');
+
+      let dragSourceCard = null;
+
+      function updateEmptyState() {
+        const hasCards = cardContainer.children.length > 0;
+        emptyState.classList.toggle('hidden', hasCards);
+      }
+
+      function normalizeContent(text) {
+        return text.replace(/\u00a0/g, ' ').replace(/\s+$/g, '');
+      }
+
+      function parseCardsFromText(text) {
+        const normalized = text.replace(/\r\n/g, '\n').trim();
+        if (!normalized) return [];
+        const lines = normalized.split('\n');
+        const blocks = [];
+        let current = [];
+
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd();
+          if (line.trim() === '---') {
+            blocks.push(current.join('\n').trim());
+            current = [];
+          } else {
+            current.push(rawLine);
+          }
+        }
+        blocks.push(current.join('\n').trim());
+        return blocks.filter(block => block.length > 0);
+      }
+
+      function serializeCardsToText() {
+        const parts = Array.from(cardContainer.querySelectorAll('.card-content')).map(node => normalizeContent(node.innerText.trim()));
+        const filtered = parts.filter(Boolean);
+        return filtered.join('\n---\n');
+      }
+
+      function createCard(content = '') {
+        const node = cardTemplate.content.firstElementChild.cloneNode(true);
+        const contentNode = node.querySelector('.card-content');
+        const deleteButton = node.querySelector('.delete-card');
+
+        contentNode.textContent = content;
+
+        node.addEventListener('dragstart', (event) => {
+          dragSourceCard = node;
+          node.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', contentNode.innerText || 'card');
+        });
+
+        node.addEventListener('dragend', () => {
+          dragSourceCard = null;
+          node.classList.remove('dragging');
+        });
+
+        deleteButton.addEventListener('click', () => {
+          node.remove();
+          updateEmptyState();
+        });
+
+        return node;
+      }
+
+      function addCard(content = '') {
+        const card = createCard(content);
+        cardContainer.appendChild(card);
+        updateEmptyState();
+        const editable = card.querySelector('.card-content');
+        editable.focus();
+        placeCaretAtEnd(editable);
+      }
+
+      function placeCaretAtEnd(element) {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      function loadTextIntoCards(text) {
+        cardContainer.innerHTML = '';
+        const cards = parseCardsFromText(text);
+        if (!cards.length) {
+          updateEmptyState();
+          return;
+        }
+        cards.forEach(content => {
+          const card = createCard(content);
+          cardContainer.appendChild(card);
+        });
+        updateEmptyState();
+      }
+
+      function handleFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target.result;
+          loadTextIntoCards(text);
+        };
+        reader.readAsText(file);
+      }
+
+      dropZone.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', (event) => {
+        const file = event.target.files && event.target.files[0];
+        handleFile(file);
+        fileInput.value = '';
+      });
+
+      ['dragenter', 'dragover'].forEach((type) => {
+        dropZone.addEventListener(type, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropZone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'dragend'].forEach((type) => {
+        dropZone.addEventListener(type, () => {
+          dropZone.classList.remove('dragover');
+        });
+      });
+
+      dropZone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+        const { files, items } = event.dataTransfer;
+        if (files && files.length) {
+          handleFile(files[0]);
+          return;
+        }
+        if (items) {
+          const textItem = Array.from(items).find((item) => item.kind === 'string');
+          if (textItem) {
+            textItem.getAsString((text) => loadTextIntoCards(text));
+          }
+        }
+      });
+
+      addCardBtn.addEventListener('click', () => {
+        addCard('');
+      });
+
+      cardContainer.addEventListener('dragover', (event) => {
+        if (!dragSourceCard) return;
+        event.preventDefault();
+        const afterElement = getDragAfterElement(cardContainer, event.clientY);
+        if (afterElement == null) {
+          cardContainer.appendChild(dragSourceCard);
+        } else if (afterElement !== dragSourceCard) {
+          cardContainer.insertBefore(dragSourceCard, afterElement);
+        }
+      });
+
+      function getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
+        return draggableElements.reduce((closest, child) => {
+          const box = child.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+          } else {
+            return closest;
+          }
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+      }
+
+      exportBtn.addEventListener('click', () => {
+        const text = serializeCardsToText();
+        if (!text) {
+          alert('Nothing to export. Add some card content first.');
+          return;
+        }
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cards.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+
+      // Initialize empty state on first load
+      updateEmptyState();
+    })();
+  </script>
+</body>
+</html>
