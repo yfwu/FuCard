@@ -177,6 +177,15 @@
       box-shadow: 0 0 0 2px var(--fulab-silver), 0 0 0 6px rgba(94, 188, 191, 0.18);
     }
 
+    .card-content .highlight {
+      display: inline;
+      background: rgba(235, 203, 139, 0.18);
+      border-radius: 6px;
+      padding: 0 3px;
+      box-shadow: inset 0 0 0 1px rgba(235, 203, 139, 0.4);
+      color: var(--fulab-graphite);
+    }
+
     #emptyState {
       text-align: center;
       color: var(--fulab-slate);
@@ -256,6 +265,52 @@
         return text.replace(/\u00a0/g, ' ').replace(/\s+$/g, '');
       }
 
+      function escapeHTML(value) {
+        return value.replace(/[&<>"']/g, (char) => {
+          switch (char) {
+            case '&': return '&amp;';
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '"': return '&quot;';
+            case "'": return '&#39;';
+            default: return char;
+          }
+        });
+      }
+
+      function convertTextToHTML(text) {
+        const safe = (text ?? '').replace(/\r\n/g, '\n');
+        if (!safe) return '';
+        const highlightPattern = /==([\s\S]*?)==/g;
+        let html = '';
+        let lastIndex = 0;
+        let match;
+
+        while ((match = highlightPattern.exec(safe)) !== null) {
+          const before = safe.slice(lastIndex, match.index);
+          if (before) {
+            html += escapeHTML(before).replace(/\n/g, '<br>');
+          }
+          const highlighted = match[1];
+          const highlightedHTML = escapeHTML(highlighted).replace(/\n/g, '<br>');
+          html += `<span class="highlight">${highlightedHTML}</span>`;
+          lastIndex = highlightPattern.lastIndex;
+        }
+
+        const remainder = safe.slice(lastIndex);
+        if (remainder) {
+          html += escapeHTML(remainder).replace(/\n/g, '<br>');
+        }
+
+        return html;
+      }
+
+      function setContentFromText(element, text) {
+        const normalized = normalizeContent((text ?? '').replace(/\r\n/g, '\n'));
+        element.dataset.rawContent = normalized;
+        element.innerHTML = convertTextToHTML(normalized);
+      }
+
       function parseCardsFromText(text) {
         const normalized = text.replace(/\r\n/g, '\n').trim();
         if (!normalized) return [];
@@ -277,7 +332,11 @@
       }
 
       function serializeCardsToText() {
-        const parts = Array.from(cardContainer.querySelectorAll('.card-content')).map(node => normalizeContent(node.innerText.trim()));
+        const parts = Array.from(cardContainer.querySelectorAll('.card-content'))
+          .map((node) => {
+            const raw = node.dataset.rawContent ?? node.innerText;
+            return normalizeContent(raw.trim());
+          });
         const filtered = parts.filter(Boolean);
         return filtered.join('\n---\n');
       }
@@ -286,8 +345,36 @@
         const node = cardTemplate.content.firstElementChild.cloneNode(true);
         const contentNode = node.querySelector('.card-content');
         const deleteButton = node.querySelector('.delete-card');
+        let lastPointerPosition = null;
 
-        contentNode.textContent = content;
+        setContentFromText(contentNode, content);
+
+        contentNode.addEventListener('pointerdown', (event) => {
+          if (event.pointerType) {
+            lastPointerPosition = { x: event.clientX, y: event.clientY };
+          }
+        });
+
+        contentNode.addEventListener('focus', () => {
+          const raw = contentNode.dataset.rawContent ?? '';
+          contentNode.textContent = raw;
+          requestAnimationFrame(() => {
+            const restored = restoreCaretFromPoint(contentNode, lastPointerPosition);
+            if (!restored) {
+              placeCaretAtEnd(contentNode);
+            }
+            lastPointerPosition = null;
+          });
+        });
+
+        contentNode.addEventListener('input', () => {
+          contentNode.dataset.rawContent = normalizeContent(contentNode.innerText);
+        });
+
+        contentNode.addEventListener('blur', () => {
+          const raw = normalizeContent(contentNode.innerText);
+          setContentFromText(contentNode, raw);
+        });
 
         node.addEventListener('dragstart', (event) => {
           dragSourceCard = node;
@@ -325,6 +412,35 @@
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
+      }
+
+      function restoreCaretFromPoint(element, point) {
+        const selection = window.getSelection();
+        if (!selection || !point) return false;
+        let range = null;
+
+        if (document.caretPositionFromPoint) {
+          const position = document.caretPositionFromPoint(point.x, point.y);
+          if (position) {
+            range = document.createRange();
+            range.setStart(position.offsetNode, position.offset);
+            range.collapse(true);
+          }
+        } else if (document.caretRangeFromPoint) {
+          const candidate = document.caretRangeFromPoint(point.x, point.y);
+          if (candidate) {
+            candidate.collapse(true);
+            range = candidate;
+          }
+        }
+
+        if (range && element.contains(range.startContainer)) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }
+
+        return false;
       }
 
       function loadTextIntoCards(text) {
