@@ -579,11 +579,23 @@
           return;
         }
 
-        const current = new URL(window.location.href);
-        current.hash = '';
-        current.searchParams.set('cards', text);
-        const shareLink = current.toString();
-        history.replaceState(null, '', shareLink);
+        const canonicalBase = 'https://yfwu.dev/FuCard/';
+        const shareURL = new URL(canonicalBase);
+        shareURL.searchParams.set('cards', text);
+        const shareLink = shareURL.toString();
+
+        try {
+          history.replaceState(null, '', shareLink);
+        } catch (error) {
+          try {
+            const current = new URL(window.location.href);
+            current.hash = '';
+            current.searchParams.set('cards', text);
+            history.replaceState(null, '', current.toString());
+          } catch (fallbackError) {
+            // Ignore history update errors (e.g., file:// origins)
+          }
+        }
 
         const originalLabel = shareBtn.dataset.defaultLabel || shareBtn.textContent;
         shareBtn.dataset.defaultLabel = originalLabel;
