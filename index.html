@@ -222,13 +222,14 @@
       <input id="fileInput" type="file" accept=".txt,text/plain">
     </label>
 
-    <div id="emptyState" class="hidden">No cards yet. Drop a text file or create a new card.</div>
+    <div id="emptyState" class="hidden">No cards yet. Drop a text file, create a new card, or add ?cards= text to the URL.</div>
     <section id="cardContainer" aria-live="polite"></section>
     <div id="controls">
       <div class="left">
         <button id="addCard" class="secondary" type="button">Add Card</button>
       </div>
       <div class="right">
+        <button id="shareCards" class="secondary" type="button">Share Link</button>
         <button id="exportCards" class="primary" type="button">Export to TXT</button>
       </div>
     </div>
@@ -250,6 +251,7 @@
       const fileInput = document.getElementById('fileInput');
       const addCardBtn = document.getElementById('addCard');
       const exportBtn = document.getElementById('exportCards');
+      const shareBtn = document.getElementById('shareCards');
       const cardContainer = document.getElementById('cardContainer');
       const emptyState = document.getElementById('emptyState');
       const cardTemplate = document.getElementById('cardTemplate');
@@ -457,6 +459,26 @@
         updateEmptyState();
       }
 
+      function loadCardsFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const queryContent = params.get('cards');
+        if (queryContent && queryContent.trim()) {
+          loadTextIntoCards(queryContent);
+          return true;
+        }
+
+        const hash = window.location.hash;
+        if (hash.startsWith('#cards=')) {
+          const hashContent = decodeURIComponent(hash.slice(7));
+          if (hashContent && hashContent.trim()) {
+            loadTextIntoCards(hashContent);
+            return true;
+          }
+        }
+
+        return false;
+      }
+
       function handleFile(file) {
         if (!file) return;
         const reader = new FileReader();
@@ -550,8 +572,43 @@
         URL.revokeObjectURL(url);
       });
 
-      // Initialize empty state on first load
-      updateEmptyState();
+      shareBtn.addEventListener('click', async () => {
+        const text = serializeCardsToText();
+        if (!text) {
+          alert('Nothing to share. Add some card content first.');
+          return;
+        }
+
+        const current = new URL(window.location.href);
+        current.hash = '';
+        current.searchParams.set('cards', text);
+        const shareLink = current.toString();
+        history.replaceState(null, '', shareLink);
+
+        const originalLabel = shareBtn.dataset.defaultLabel || shareBtn.textContent;
+        shareBtn.dataset.defaultLabel = originalLabel;
+
+        function resetLabel() {
+          shareBtn.textContent = originalLabel;
+        }
+
+        try {
+          await navigator.clipboard.writeText(shareLink);
+          shareBtn.textContent = 'Link copied!';
+          clearTimeout(shareBtn._resetTimer);
+          shareBtn._resetTimer = setTimeout(resetLabel, 2000);
+        } catch (error) {
+          clearTimeout(shareBtn._resetTimer);
+          shareBtn.textContent = 'Copy manually';
+          prompt('Copy this link', shareLink);
+          shareBtn._resetTimer = setTimeout(resetLabel, 2000);
+        }
+      });
+
+      // Initialize from URL (query or hash) when available, otherwise show empty state
+      if (!loadCardsFromURL()) {
+        updateEmptyState();
+      }
     })();
   </script>
 </body>
