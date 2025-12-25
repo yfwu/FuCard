@@ -119,6 +119,12 @@
       box-shadow: none;
     }
 
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
     #cardContainer {
       display: flex;
       flex-direction: column;
@@ -144,7 +150,7 @@
     }
 
     .card.is-selected {
-      outline: 5px solid var(--fulab-emerald);
+      outline: 5px solid var(--fulab-teal);
       outline-offset: 2px;
     }
 
@@ -232,6 +238,7 @@
     <div id="controls">
       <div class="left">
         <button id="addCard" class="secondary" type="button">Add Card</button>
+        <button id="undoDelete" class="secondary" type="button" disabled>Undo</button>
       </div>
       <div class="right">
         <button id="shareCards" class="secondary" type="button">Share Link</button>
@@ -255,6 +262,7 @@
       const dropZone = document.getElementById('dropZone');
       const fileInput = document.getElementById('fileInput');
       const addCardBtn = document.getElementById('addCard');
+      const undoBtn = document.getElementById('undoDelete');
       const exportBtn = document.getElementById('exportCards');
       const shareBtn = document.getElementById('shareCards');
       const cardContainer = document.getElementById('cardContainer');
@@ -263,6 +271,8 @@
 
       let dragSourceCard = null;
       let selectedCard = null;
+      let lastDeleted = null;
+      const pendingHighlights = new WeakMap();
 
       function updateEmptyState() {
         const hasCards = cardContainer.children.length > 0;
@@ -271,6 +281,51 @@
 
       function normalizeContent(text) {
         return text.replace(/\u00a0/g, ' ').replace(/\s+$/g, '');
+      }
+
+      function setUndoState(canUndo) {
+        undoBtn.disabled = !canUndo;
+      }
+
+      function replaceRangeWithText(range, text, preserveSelection = false) {
+        const selection = window.getSelection();
+        const savedRanges = [];
+        if (preserveSelection && selection) {
+          for (let i = 0; i < selection.rangeCount; i += 1) {
+            savedRanges.push(selection.getRangeAt(i).cloneRange());
+          }
+        }
+        range.deleteContents();
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        if (preserveSelection && selection) {
+          selection.removeAllRanges();
+          savedRanges.forEach((savedRange) => selection.addRange(savedRange));
+          return;
+        }
+        range.setStartAfter(textNode);
+        range.collapse(true);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+
+      function rangesEqual(first, second) {
+        return first.startContainer === second.startContainer
+          && first.startOffset === second.startOffset
+          && first.endContainer === second.endContainer
+          && first.endOffset === second.endOffset;
+      }
+
+      function wrapSelectionWithEquals(contentNode) {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        const text = selection.toString();
+        if (!text) return;
+        const range = selection.getRangeAt(0);
+        replaceRangeWithText(range, `==${text}==`);
+        contentNode.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
       function escapeHTML(value) {
@@ -365,6 +420,13 @@
           if (event.pointerType) {
             lastPointerPosition = { x: event.clientX, y: event.clientY };
           }
+          const pending = pendingHighlights.get(contentNode);
+          if (pending) {
+            clearTimeout(pending.timer);
+            replaceRangeWithText(pending.range, '=', true);
+            contentNode.dispatchEvent(new Event('input', { bubbles: true }));
+            pendingHighlights.delete(contentNode);
+          }
         });
 
         contentNode.addEventListener('focus', () => {
@@ -384,8 +446,64 @@
         });
 
         contentNode.addEventListener('blur', () => {
+          const pending = pendingHighlights.get(contentNode);
+          if (pending) {
+            clearTimeout(pending.timer);
+            replaceRangeWithText(pending.range, '=', true);
+            pendingHighlights.delete(contentNode);
+          }
           const raw = normalizeContent(contentNode.innerText);
           setContentFromText(contentNode, raw);
+        });
+
+        contentNode.addEventListener('keydown', (event) => {
+          if (event.key !== '=' || event.ctrlKey || event.metaKey || event.altKey) return;
+          const selection = window.getSelection();
+          if (!selection || selection.rangeCount === 0) return;
+          const range = selection.getRangeAt(0);
+          if (selection.isCollapsed || !contentNode.contains(range.commonAncestorContainer)) {
+            const pending = pendingHighlights.get(contentNode);
+            if (pending) {
+              clearTimeout(pending.timer);
+              replaceRangeWithText(pending.range, '=', true);
+              contentNode.dispatchEvent(new Event('input', { bubbles: true }));
+              pendingHighlights.delete(contentNode);
+            }
+            return;
+          }
+
+          event.preventDefault();
+          const pending = pendingHighlights.get(contentNode);
+          if (pending) {
+            clearTimeout(pending.timer);
+            pendingHighlights.delete(contentNode);
+            wrapSelectionWithEquals(contentNode);
+            return;
+          }
+
+          const rangeClone = range.cloneRange();
+          const timer = setTimeout(() => {
+            const selection = window.getSelection();
+            const sameRange = selection && selection.rangeCount
+              && rangesEqual(selection.getRangeAt(0), rangeClone);
+            replaceRangeWithText(rangeClone, '=', !sameRange);
+            contentNode.dispatchEvent(new Event('input', { bubbles: true }));
+            pendingHighlights.delete(contentNode);
+          }, 450);
+          pendingHighlights.set(contentNode, { timer, range: rangeClone });
+        });
+
+        contentNode.addEventListener('keydown', (event) => {
+          if (event.key === '=') return;
+          const pending = pendingHighlights.get(contentNode);
+          if (!pending) return;
+          clearTimeout(pending.timer);
+          const selection = window.getSelection();
+          const sameRange = selection && selection.rangeCount
+            && rangesEqual(selection.getRangeAt(0), pending.range);
+          replaceRangeWithText(pending.range, '=', !sameRange);
+          contentNode.dispatchEvent(new Event('input', { bubbles: true }));
+          pendingHighlights.delete(contentNode);
         });
 
         node.addEventListener('click', (event) => {
@@ -444,6 +562,10 @@
         });
 
         deleteButton.addEventListener('click', () => {
+          const index = Array.from(cardContainer.children).indexOf(node);
+          const raw = contentNode.dataset.rawContent ?? contentNode.innerText;
+          lastDeleted = { content: normalizeContent(raw), index };
+          setUndoState(true);
           node.remove();
           if (selectedCard === node) {
             selectedCard = null;
@@ -503,6 +625,9 @@
 
       function loadTextIntoCards(text) {
         cardContainer.innerHTML = '';
+        selectedCard = null;
+        lastDeleted = null;
+        setUndoState(false);
         const cards = parseCardsFromText(text);
         if (!cards.length) {
           updateEmptyState();
@@ -585,6 +710,16 @@
 
       addCardBtn.addEventListener('click', () => {
         addCard('');
+      });
+
+      undoBtn.addEventListener('click', () => {
+        if (!lastDeleted) return;
+        const card = createCard(lastDeleted.content);
+        const reference = cardContainer.children[lastDeleted.index] || null;
+        cardContainer.insertBefore(card, reference);
+        updateEmptyState();
+        lastDeleted = null;
+        setUndoState(false);
       });
 
       cardContainer.addEventListener('dragover', (event) => {
