@@ -236,7 +236,7 @@
   </main>
 
   <template id="cardTemplate">
-    <article class="card" draggable="true">
+    <article class="card" draggable="false">
       <div class="card-header">
         <span class="card-handle" title="Drag to reorder">⋮⋮</span>
         <button class="delete-card danger" type="button">Delete</button>
@@ -347,7 +347,11 @@
         const node = cardTemplate.content.firstElementChild.cloneNode(true);
         const contentNode = node.querySelector('.card-content');
         const deleteButton = node.querySelector('.delete-card');
+        const handle = node.querySelector('.card-handle');
         let lastPointerPosition = null;
+        let allowDrag = false;
+
+        node.draggable = false;
 
         setContentFromText(contentNode, content);
 
@@ -378,7 +382,38 @@
           setContentFromText(contentNode, raw);
         });
 
+        handle.addEventListener('pointerdown', () => {
+          allowDrag = true;
+          node.draggable = true;
+        });
+
+        handle.addEventListener('pointerup', () => {
+          if (!node.classList.contains('dragging')) {
+            allowDrag = false;
+            node.draggable = false;
+          }
+        });
+
+        handle.addEventListener('pointerleave', () => {
+          if (!node.classList.contains('dragging')) {
+            allowDrag = false;
+            node.draggable = false;
+          }
+        });
+
+        handle.addEventListener('pointercancel', () => {
+          if (!node.classList.contains('dragging')) {
+            allowDrag = false;
+            node.draggable = false;
+          }
+        });
+
         node.addEventListener('dragstart', (event) => {
+          if (!allowDrag) {
+            event.preventDefault();
+            node.draggable = false;
+            return;
+          }
           dragSourceCard = node;
           node.classList.add('dragging');
           event.dataTransfer.effectAllowed = 'move';
@@ -388,6 +423,8 @@
         node.addEventListener('dragend', () => {
           dragSourceCard = null;
           node.classList.remove('dragging');
+          allowDrag = false;
+          node.draggable = false;
         });
 
         deleteButton.addEventListener('click', () => {
