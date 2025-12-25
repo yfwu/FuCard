@@ -143,6 +143,11 @@
       box-shadow: var(--shadow-neo-inset);
     }
 
+    .card.is-selected {
+      outline: 5px solid var(--fulab-emerald);
+      outline-offset: 2px;
+    }
+
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -257,6 +262,7 @@
       const cardTemplate = document.getElementById('cardTemplate');
 
       let dragSourceCard = null;
+      let selectedCard = null;
 
       function updateEmptyState() {
         const hasCards = cardContainer.children.length > 0;
@@ -382,6 +388,16 @@
           setContentFromText(contentNode, raw);
         });
 
+        node.addEventListener('click', (event) => {
+          if (event.target.closest('.card-content')) return;
+          if (event.target.closest('button')) return;
+          if (selectedCard && selectedCard !== node) {
+            selectedCard.classList.remove('is-selected');
+          }
+          selectedCard = node;
+          selectedCard.classList.add('is-selected');
+        });
+
         handle.addEventListener('pointerdown', () => {
           allowDrag = true;
           node.draggable = true;
@@ -429,6 +445,9 @@
 
         deleteButton.addEventListener('click', () => {
           node.remove();
+          if (selectedCard === node) {
+            selectedCard = null;
+          }
           updateEmptyState();
         });
 
@@ -652,6 +671,13 @@
           prompt('Copy this link', shareLink);
           shareBtn._resetTimer = setTimeout(resetLabel, 2000);
         }
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!selectedCard) return;
+        if (event.target.closest('.card')) return;
+        selectedCard.classList.remove('is-selected');
+        selectedCard = null;
       });
 
       // Initialize from URL (query or hash) when available, otherwise show empty state
