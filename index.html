@@ -247,6 +247,7 @@
       <div class="left">
         <button id="addCard" class="secondary" type="button">Add Card</button>
         <button id="undoDelete" class="secondary" type="button" disabled>Undo</button>
+        <button id="toggleCapsBold" class="secondary" type="button" aria-pressed="true">CAPS Bold: On</button>
       </div>
       <div class="right">
         <button id="shareCards" class="secondary" type="button">Share Link</button>
@@ -278,13 +279,16 @@
       const undoBtn = document.getElementById('undoDelete');
       const exportBtn = document.getElementById('exportCards');
       const shareBtn = document.getElementById('shareCards');
+      const toggleCapsBoldBtn = document.getElementById('toggleCapsBold');
       const cardContainer = document.getElementById('cardContainer');
       const emptyState = document.getElementById('emptyState');
       const cardTemplate = document.getElementById('cardTemplate');
 
+      const capsBoldStorageKey = 'fucardCapsBoldEnabled';
       let dragSourceCard = null;
       let selectedCard = null;
       let lastDeleted = null;
+      let capsBoldEnabled = true;
       const pendingHighlights = new WeakMap();
 
       function updateEmptyState() {
@@ -298,6 +302,39 @@
 
       function setUndoState(canUndo) {
         undoBtn.disabled = !canUndo;
+      }
+
+      function loadCapsBoldSetting() {
+        try {
+          const stored = localStorage.getItem(capsBoldStorageKey);
+          if (stored === null) return true;
+          return stored === 'true';
+        } catch (error) {
+          return true;
+        }
+      }
+
+      function persistCapsBoldSetting(value) {
+        try {
+          localStorage.setItem(capsBoldStorageKey, value ? 'true' : 'false');
+        } catch (error) {
+        }
+      }
+
+      function updateCapsBoldButton() {
+        if (!toggleCapsBoldBtn) return;
+        toggleCapsBoldBtn.setAttribute('aria-pressed', String(capsBoldEnabled));
+        toggleCapsBoldBtn.textContent = capsBoldEnabled ? 'CAPS Bold: On' : 'CAPS Bold: Off';
+      }
+
+      function rerenderCardContents(options = {}) {
+        const { skipFocused = false } = options;
+        const focused = document.activeElement;
+        Array.from(cardContainer.querySelectorAll('.card-content')).forEach((node) => {
+          if (skipFocused && focused === node) return;
+          const raw = node.dataset.rawContent ?? node.innerText;
+          setContentFromText(node, raw);
+        });
       }
 
       function replaceRangeWithText(range, text, preserveSelection = false) {
@@ -356,6 +393,9 @@
 
       function renderCaptionLineHTML(text) {
         if (!text) return '';
+        if (!capsBoldEnabled) {
+          return escapeHTML(text);
+        }
         const captionPattern = /(^|[^A-Za-z0-9])([A-Z][A-Z0-9]*)(?=$|[^A-Za-z0-9])/g;
         let html = '';
         let lastIndex = 0;
@@ -780,6 +820,17 @@
       addCardBtn.addEventListener('click', () => {
         addCard('');
       });
+
+      if (toggleCapsBoldBtn) {
+        capsBoldEnabled = loadCapsBoldSetting();
+        updateCapsBoldButton();
+        toggleCapsBoldBtn.addEventListener('click', () => {
+          capsBoldEnabled = !capsBoldEnabled;
+          persistCapsBoldSetting(capsBoldEnabled);
+          updateCapsBoldButton();
+          rerenderCardContents({ skipFocused: true });
+        });
+      }
 
       undoBtn.addEventListener('click', () => {
         if (!lastDeleted) return;
