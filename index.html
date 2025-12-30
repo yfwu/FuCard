@@ -356,7 +356,7 @@
 
       function renderCaptionLineHTML(text) {
         if (!text) return '';
-        const captionPattern = /(^|[^A-Z0-9])([A-Z][A-Z0-9]*:)/g;
+        const captionPattern = /(^|[^A-Za-z0-9])([A-Z][A-Z0-9]*)(?=$|[^A-Za-z0-9])/g;
         let html = '';
         let lastIndex = 0;
         let match;
