@@ -117,6 +117,12 @@
       box-shadow: none;
     }
 
+    button.indigo {
+      background: var(--fulab-indigo);
+      color: #ffffff;
+      border-color: transparent;
+    }
+
     button:disabled {
       opacity: 0.55;
       cursor: not-allowed;
@@ -248,6 +254,7 @@
         <button id="addCard" class="secondary" type="button">Add Card</button>
         <button id="undoDelete" class="secondary" type="button" disabled>Undo</button>
         <button id="toggleCapsBold" class="secondary" type="button" aria-pressed="true">CAPS Bold: On</button>
+        <button id="toggleEditLock" class="indigo" type="button" aria-pressed="false">Edit Lock: Off</button>
       </div>
       <div class="right">
         <button id="shareCards" class="secondary" type="button">Share Link</button>
@@ -280,6 +287,7 @@
       const exportBtn = document.getElementById('exportCards');
       const shareBtn = document.getElementById('shareCards');
       const toggleCapsBoldBtn = document.getElementById('toggleCapsBold');
+      const toggleEditLockBtn = document.getElementById('toggleEditLock');
       const cardContainer = document.getElementById('cardContainer');
       const emptyState = document.getElementById('emptyState');
       const cardTemplate = document.getElementById('cardTemplate');
@@ -289,6 +297,7 @@
       let selectedCard = null;
       let lastDeleted = null;
       let capsBoldEnabled = true;
+      let editLockEnabled = false;
       const pendingHighlights = new WeakMap();
 
       function updateEmptyState() {
@@ -325,6 +334,23 @@
         if (!toggleCapsBoldBtn) return;
         toggleCapsBoldBtn.setAttribute('aria-pressed', String(capsBoldEnabled));
         toggleCapsBoldBtn.textContent = capsBoldEnabled ? 'CAPS Bold: On' : 'CAPS Bold: Off';
+      }
+
+      function updateEditLockButton() {
+        if (!toggleEditLockBtn) return;
+        toggleEditLockBtn.setAttribute('aria-pressed', String(editLockEnabled));
+        toggleEditLockBtn.textContent = editLockEnabled ? 'Edit Lock: On' : 'Edit Lock: Off';
+      }
+
+      function applyEditLockState() {
+        const contents = Array.from(cardContainer.querySelectorAll('.card-content'));
+        contents.forEach((node) => {
+          node.setAttribute('contenteditable', String(!editLockEnabled));
+        });
+        if (editLockEnabled && document.activeElement?.classList.contains('card-content')) {
+          document.activeElement.blur();
+        }
+        rerenderCardContents();
       }
 
       function rerenderCardContents(options = {}) {
@@ -500,6 +526,7 @@
         node.draggable = false;
 
         setContentFromText(contentNode, content);
+        contentNode.setAttribute('contenteditable', String(!editLockEnabled));
 
         contentNode.addEventListener('pointerdown', (event) => {
           if (event.pointerType) {
@@ -515,6 +542,10 @@
         });
 
         contentNode.addEventListener('focus', () => {
+          if (editLockEnabled) {
+            contentNode.blur();
+            return;
+          }
           const raw = contentNode.dataset.rawContent ?? '';
           contentNode.textContent = raw;
           requestAnimationFrame(() => {
@@ -690,8 +721,10 @@
         cardContainer.appendChild(card);
         updateEmptyState();
         const editable = card.querySelector('.card-content');
-        editable.focus();
-        placeCaretAtEnd(editable);
+        if (!editLockEnabled) {
+          editable.focus();
+          placeCaretAtEnd(editable);
+        }
       }
 
       function placeCaretAtEnd(element) {
@@ -829,6 +862,15 @@
           persistCapsBoldSetting(capsBoldEnabled);
           updateCapsBoldButton();
           rerenderCardContents({ skipFocused: true });
+        });
+      }
+
+      if (toggleEditLockBtn) {
+        updateEditLockButton();
+        toggleEditLockBtn.addEventListener('click', () => {
+          editLockEnabled = !editLockEnabled;
+          updateEditLockButton();
+          applyEditLockState();
         });
       }
 
